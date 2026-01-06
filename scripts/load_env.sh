@@ -36,3 +36,15 @@ done
 echo "[INFO] Terraform variable overrides set:"
 echo "  TF_VAR_remote_state_bucket_name=${TF_VAR_remote_state_bucket_name-<unset>}"
 echo "  TF_VAR_dynamodb_table_name=${TF_VAR_dynamodb_table_name-<unset>}"
+
+# Write bootstrap override tfvars so Terraform picks up the desired state bucket/table
+if [[ -n "${TF_STATE_BUCKET:-}" && -n "${TF_LOCK_TABLE:-}" ]]; then
+  BOOTSTRAP_TFVARS="terraform/bootstrap/override.auto.tfvars"
+  cat > "${BOOTSTRAP_TFVARS}" <<EOF
+remote_state_bucket_name = "${TF_STATE_BUCKET}"
+dynamodb_table_name      = "${TF_LOCK_TABLE}"
+EOF
+  echo "[INFO] Wrote ${BOOTSTRAP_TFVARS} for bootstrap."
+else
+  echo "[WARN] TF_STATE_BUCKET or TF_LOCK_TABLE not set; bootstrap tfvars not written."
+fi
