@@ -21,8 +21,8 @@ TF_VAR_EXPORTS = \
 
 TF_DIR ?= terraform/env
 BOOTSTRAP_DIR ?= terraform/bootstrap
-BACKEND_FILE ?= $(TF_DIR)/backend.hcl
-TFVARS_FILE ?= $(TF_DIR)/$(ENV).tfvars
+BACKEND_FILE ?= backend.hcl
+TFVARS_FILE ?= $(ENV).tfvars
 PLAN_FILE ?= terraform.plan
 
 .PHONY: bootstrap-init bootstrap-apply fmt validate tf-init plan apply destroy kubeconfig addons status
@@ -41,20 +41,20 @@ validate: tf-init
 
 # Initializes env Terraform using backend.hcl generated per environment.
 tf-init:
-	@test -f $(BACKEND_FILE) || (echo "Missing $(BACKEND_FILE). Copy backend.hcl.example and set bucket/table/key." && exit 1)
+	@test -f $(TF_DIR)/$(BACKEND_FILE) || (echo "Missing $(TF_DIR)/$(BACKEND_FILE). Copy backend.hcl.example and set bucket/table/key." && exit 1)
 	terraform -chdir=$(TF_DIR) init -backend-config=$(BACKEND_FILE)
 
 plan: tf-init
-	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
+	@test -f $(TF_DIR)/$(TFVARS_FILE) || (echo "Missing $(TF_DIR)/$(TFVARS_FILE). Copy terraform.tfvars.example to $(TF_DIR)/$(TFVARS_FILE)." && exit 1)
 	$(TF_VAR_EXPORTS) terraform -chdir=$(TF_DIR) plan -var-file=$(TFVARS_FILE) -out=$(PLAN_FILE)
 
 apply: tf-init
-	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
+	@test -f $(TF_DIR)/$(TFVARS_FILE) || (echo "Missing $(TF_DIR)/$(TFVARS_FILE). Copy terraform.tfvars.example to $(TF_DIR)/$(TFVARS_FILE)." && exit 1)
 	$(TF_VAR_EXPORTS) terraform -chdir=$(TF_DIR) apply $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
 
 # Destroys all env resources; requires explicit confirmation.
 destroy: tf-init
-	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
+	@test -f $(TF_DIR)/$(TFVARS_FILE) || (echo "Missing $(TF_DIR)/$(TFVARS_FILE). Copy terraform.tfvars.example to $(TF_DIR)/$(TFVARS_FILE)." && exit 1)
 	$(TF_VAR_EXPORTS) terraform -chdir=$(TF_DIR) destroy $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
 
 kubeconfig:
