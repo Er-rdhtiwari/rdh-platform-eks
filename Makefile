@@ -2,6 +2,24 @@ SHELL := /bin/bash
 ENV ?= dev
 AWS_REGION ?= ap-south-1
 TF_DIR ?= terraform/env
+
+# Auto-load .env if present so TF_VAR_* and AWS settings are available
+ifneq (,$(wildcard .env))
+include .env
+export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
+endif
+
+TF_VAR_node_instance_types ?= $(NODE_INSTANCE_TYPES)
+TF_VAR_node_min_size ?= $(NODE_MIN_SIZE)
+TF_VAR_node_desired_size ?= $(NODE_DESIRED_SIZE)
+TF_VAR_node_max_size ?= $(NODE_MAX_SIZE)
+TF_VAR_EXPORTS = \
+  TF_VAR_node_instance_types='$(TF_VAR_node_instance_types)' \
+  TF_VAR_node_min_size='$(TF_VAR_node_min_size)' \
+  TF_VAR_node_desired_size='$(TF_VAR_node_desired_size)' \
+  TF_VAR_node_max_size='$(TF_VAR_node_max_size)'
+
+TF_DIR ?= terraform/env
 BOOTSTRAP_DIR ?= terraform/bootstrap
 BACKEND_FILE ?= $(TF_DIR)/backend.hcl
 TFVARS_FILE ?= $(TF_DIR)/$(ENV).tfvars
@@ -28,16 +46,16 @@ tf-init:
 
 plan: tf-init
 	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
-	terraform -chdir=$(TF_DIR) plan -var-file=$(TFVARS_FILE) -out=$(PLAN_FILE)
+	$(TF_VAR_EXPORTS) terraform -chdir=$(TF_DIR) plan -var-file=$(TFVARS_FILE) -out=$(PLAN_FILE)
 
 apply: tf-init
 	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
-	terraform -chdir=$(TF_DIR) apply $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
+	$(TF_VAR_EXPORTS) terraform -chdir=$(TF_DIR) apply $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
 
 # Destroys all env resources; requires explicit confirmation.
 destroy: tf-init
 	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
-	terraform -chdir=$(TF_DIR) destroy $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
+	$(TF_VAR_EXPORTS) terraform -chdir=$(TF_DIR) destroy $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
 
 kubeconfig:
 	@CLUSTER_NAME=$(shell terraform -chdir=$(TF_DIR) output -raw cluster_name); \
