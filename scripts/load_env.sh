@@ -15,6 +15,14 @@ set -a
 source "${ENV_FILE}"
 set +a
 
+# Map friendly names to Terraform variable overrides for bootstrap/backend use
+if [[ -n "${TF_STATE_BUCKET:-}" ]]; then
+  export TF_VAR_remote_state_bucket_name="${TF_STATE_BUCKET}"
+fi
+if [[ -n "${TF_LOCK_TABLE:-}" ]]; then
+  export TF_VAR_dynamodb_table_name="${TF_LOCK_TABLE}"
+fi
+
 echo "[INFO] Exported variables from ${ENV_FILE}. Current values:"
 grep -v '^[[:space:]]*#' "${ENV_FILE}" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' | while IFS='=' read -r key _; do
   val="${!key-}"
@@ -24,3 +32,7 @@ grep -v '^[[:space:]]*#' "${ENV_FILE}" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' | wh
     echo "  ${key}=${val}"
   fi
 done
+
+echo "[INFO] Terraform variable overrides set:"
+echo "  TF_VAR_remote_state_bucket_name=${TF_VAR_remote_state_bucket_name-<unset>}"
+echo "  TF_VAR_dynamodb_table_name=${TF_VAR_dynamodb_table_name-<unset>}"
