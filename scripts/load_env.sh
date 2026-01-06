@@ -15,4 +15,12 @@ set -a
 source "${ENV_FILE}"
 set +a
 
-echo "[INFO] Exported variables from ${ENV_FILE}"
+echo "[INFO] Exported variables from ${ENV_FILE}. Current values:"
+grep -v '^[[:space:]]*#' "${ENV_FILE}" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' | while IFS='=' read -r key _; do
+  val="${!key-}"
+  if [[ -z "${val}" ]]; then
+    echo "  ${key}=<empty>"
+  else
+    echo "  ${key}=${val}"
+  fi
+done
