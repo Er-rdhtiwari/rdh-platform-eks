@@ -17,7 +17,7 @@ A single, production-minded EKS "platform" cluster lowers PoC friction while kee
 - Environment: `dev`
 - Name prefix: `platform`
 - Domain: `poc.<root_domain>` (root domain required input)
-- Node type/size: from tfvars or `.env` (`NODE_INSTANCE_TYPES`, `NODE_MIN_SIZE`, `NODE_DESIRED_SIZE`, `NODE_MAX_SIZE` default to `t3.medium` 2/2/4)
+- Node type/size: from tfvars or `.env` (`NODE_INSTANCE_TYPES`, `NODE_MIN_SIZE`, `NODE_DESIRED_SIZE`, `NODE_MAX_SIZE` default to `t3.large` 2/2/4; list supports multiple instance types)
 - Feature toggles: `enable_cert_manager`, `enable_external_dns`, `enable_metrics_server`, `enable_ecr`, `create_poc_hosted_zone`
 - Other: optional `parent_hosted_zone_id` for delegation, optional `existing_poc_hosted_zone_id` when not creating, `node_instance_types`, `vpc_cidr`, `single_nat_gateway`
 
