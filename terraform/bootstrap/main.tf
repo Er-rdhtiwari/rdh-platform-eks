@@ -1,13 +1,6 @@
-resource "random_id" "suffix" {
-  byte_length = 2
-}
-
 locals {
-  default_bucket_name = lower(replace("${var.name_prefix}-${var.environment}-tfstate-${random_id.suffix.hex}", "_", "-"))
-  default_table_name  = lower(replace("${var.name_prefix}-${var.environment}-tf-lock-${random_id.suffix.hex}", "_", "-"))
-
-  bucket_name = var.remote_state_bucket_name != "" ? var.remote_state_bucket_name : local.default_bucket_name
-  table_name  = var.dynamodb_table_name != "" ? var.dynamodb_table_name : local.default_table_name
+  bucket_name = var.remote_state_bucket_name
+  table_name  = var.dynamodb_table_name
 }
 
 resource "aws_s3_bucket" "tf_state" {

@@ -42,7 +42,7 @@ A single, production-minded EKS "platform" cluster lowers PoC friction while kee
    terraform -chdir=terraform/bootstrap init
    terraform -chdir=terraform/bootstrap apply -auto-approve
    ```
-   Bootstrap names are globally unique (random suffix); capture outputs `state_bucket_name` and `lock_table_name`.
+   You must set `TF_STATE_BUCKET` and `TF_LOCK_TABLE` (or TF_VAR_remote_state_bucket_name/dynamodb_table_name) before apply; capture outputs `state_bucket_name` and `lock_table_name`.
 2) **Prepare env config**:
    - Copy `terraform/env/backend.hcl.example` to `terraform/env/backend.hcl` and fill with the bucket/table/key/region (key pattern `env/<env>/terraform.tfstate`).
    - Copy `terraform/env/terraform.tfvars.example` to `terraform/env/<env>.tfvars` and set `root_domain`, `parent_hosted_zone_id` (if delegating), node sizes, toggles, etc.

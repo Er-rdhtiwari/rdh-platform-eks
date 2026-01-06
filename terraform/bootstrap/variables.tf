@@ -20,12 +20,22 @@ variable "remote_state_bucket_name" {
   description = "Optional explicit S3 bucket name for Terraform state"
   type        = string
   default     = ""
+
+  validation {
+    condition     = length(var.remote_state_bucket_name) > 0
+    error_message = "Set remote_state_bucket_name (e.g., via TF_VAR_remote_state_bucket_name)."
+  }
 }
 
 variable "dynamodb_table_name" {
   description = "Optional explicit DynamoDB table name for state locking"
   type        = string
   default     = ""
+
+  validation {
+    condition     = length(var.dynamodb_table_name) > 0
+    error_message = "Set dynamodb_table_name (e.g., via TF_VAR_dynamodb_table_name)."
+  }
 }
 
 variable "force_destroy" {
