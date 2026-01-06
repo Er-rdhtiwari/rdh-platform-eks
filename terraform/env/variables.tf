@@ -59,7 +59,7 @@ variable "cluster_version" {
 variable "node_instance_types" {
   description = "Instance types for managed node group"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.large"]
 }
 
 variable "node_desired_size" {
