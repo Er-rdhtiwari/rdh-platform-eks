@@ -28,8 +28,10 @@ pipeline {
       steps {
         sh '''
 set -euo pipefail
-: "${TF_STATE_BUCKET:?Set TF_STATE_BUCKET in Jenkins credentials/env}"
-: "${TF_LOCK_TABLE:?Set TF_LOCK_TABLE in Jenkins credentials/env}"
+TF_STATE_BUCKET=${TF_STATE_BUCKET:-rdhcloudlab-platform-tfstate}
+TF_LOCK_TABLE=${TF_LOCK_TABLE:-rdhcloudlab-platform-tflock}
+: "${TF_STATE_BUCKET:?Set TF_STATE_BUCKET in Jenkins credentials/env or accept default}"
+: "${TF_LOCK_TABLE:?Set TF_LOCK_TABLE in Jenkins credentials/env or accept default}"
 cat > terraform/env/backend.hcl <<'EOT_BACKEND'
 bucket         = "${TF_STATE_BUCKET}"
 dynamodb_table = "${TF_LOCK_TABLE}"
