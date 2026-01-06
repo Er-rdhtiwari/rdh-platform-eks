@@ -38,6 +38,7 @@ A single, production-minded EKS "platform" cluster lowers PoC friction while kee
 ## Execution flow (do this order)
 1) **Bootstrap remote state** (local or Jenkins):
    ```bash
+   ./scripts/load_env.sh            # loads .env into current shell (optional but recommended)
    terraform -chdir=terraform/bootstrap init
    terraform -chdir=terraform/bootstrap apply -auto-approve
    ```
