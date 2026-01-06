@@ -1,0 +1,52 @@
+SHELL := /bin/bash
+ENV ?= dev
+AWS_REGION ?= ap-south-1
+TF_DIR ?= terraform/env
+BOOTSTRAP_DIR ?= terraform/bootstrap
+BACKEND_FILE ?= $(TF_DIR)/backend.hcl
+TFVARS_FILE ?= $(TF_DIR)/$(ENV).tfvars
+PLAN_FILE ?= terraform.plan
+
+.PHONY: bootstrap-init bootstrap-apply fmt validate tf-init plan apply destroy kubeconfig addons status
+
+bootstrap-init:
+	terraform -chdir=$(BOOTSTRAP_DIR) init
+
+bootstrap-apply:
+	terraform -chdir=$(BOOTSTRAP_DIR) apply -auto-approve
+
+fmt:
+	terraform -chdir=$(TF_DIR) fmt
+
+validate: tf-init
+	terraform -chdir=$(TF_DIR) validate
+
+# Initializes env Terraform using backend.hcl generated per environment.
+tf-init:
+	@test -f $(BACKEND_FILE) || (echo "Missing $(BACKEND_FILE). Copy backend.hcl.example and set bucket/table/key." && exit 1)
+	terraform -chdir=$(TF_DIR) init -backend-config=$(BACKEND_FILE)
+
+plan: tf-init
+	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
+	terraform -chdir=$(TF_DIR) plan -var-file=$(TFVARS_FILE) -out=$(PLAN_FILE)
+
+apply: tf-init
+	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
+	terraform -chdir=$(TF_DIR) apply $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
+
+# Destroys all env resources; requires explicit confirmation.
+destroy: tf-init
+	@test -f $(TFVARS_FILE) || (echo "Missing $(TFVARS_FILE). Copy terraform.tfvars.example to $(TFVARS_FILE)." && exit 1)
+	terraform -chdir=$(TF_DIR) destroy $(if $(AUTO_APPROVE),-auto-approve,) -var-file=$(TFVARS_FILE)
+
+kubeconfig:
+	@CLUSTER_NAME=$(shell terraform -chdir=$(TF_DIR) output -raw cluster_name); \
+	if [ -z "$$CLUSTER_NAME" ]; then echo "cluster_name output not found; ensure Terraform applied." && exit 1; fi; \
+	echo "Updating kubeconfig for $$CLUSTER_NAME in $(AWS_REGION)"; \
+	aws eks update-kubeconfig --region $(AWS_REGION) --name $$CLUSTER_NAME --alias $$CLUSTER_NAME
+
+addons:
+	@ACTION=$${ACTION:-install}; ./scripts/manage_addons.sh $$ACTION
+
+status:
+	./scripts/verify_cluster.sh

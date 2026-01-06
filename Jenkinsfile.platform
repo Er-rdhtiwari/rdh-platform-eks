@@ -1,0 +1,124 @@
+pipeline {
+  agent any
+  options { timestamps() }
+
+  parameters {
+    choice(name: 'ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Terraform action to run')
+    string(name: 'ENV', defaultValue: 'dev', description: 'Environment name (matches tfvars file)')
+    booleanParam(name: 'AUTO_APPROVE', defaultValue: false, description: 'Auto-approve apply/destroy (still gated by manual input)')
+    booleanParam(name: 'INSTALL_ADDONS', defaultValue: true, description: 'Install Helm add-ons after apply')
+  }
+
+  environment {
+    AWS_REGION = "${env.AWS_REGION ?: 'ap-south-1'}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Tooling') {
+      steps {
+        sh 'chmod +x scripts/require_tools.sh && ./scripts/require_tools.sh'
+      }
+    }
+
+    stage('Backend Config') {
+      steps {
+        sh '''
+set -euo pipefail
+: "${TF_STATE_BUCKET:?Set TF_STATE_BUCKET in Jenkins credentials/env}"
+: "${TF_LOCK_TABLE:?Set TF_LOCK_TABLE in Jenkins credentials/env}"
+cat > terraform/env/backend.hcl <<'EOT_BACKEND'
+bucket         = "${TF_STATE_BUCKET}"
+dynamodb_table = "${TF_LOCK_TABLE}"
+key            = "env/${ENV}/terraform.tfstate"
+region         = "${AWS_REGION}"
+encrypt        = true
+EOT_BACKEND
+'''
+      }
+    }
+
+    stage('AWS Auth (optional assume-role)') {
+      steps {
+        sh '''
+set -euo pipefail
+if [ -n "${AWS_ROLE_ARN:-}" ]; then
+  echo "Assuming role for pipeline execution"
+  set +x
+  CREDS=$(aws sts assume-role --role-arn "$AWS_ROLE_ARN" --role-session-name "jenkins-${BUILD_NUMBER}" --duration-seconds 3600)
+  export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.Credentials.AccessKeyId')
+  export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
+  export AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
+  set -x
+fi
+'''
+      }
+    }
+
+    stage('Init') {
+      steps {
+        sh 'make tf-init ENV=${ENV} AWS_REGION=${AWS_REGION}'
+      }
+    }
+
+    stage('Fmt & Validate') {
+      steps {
+        sh 'make fmt validate ENV=${ENV} AWS_REGION=${AWS_REGION}'
+      }
+    }
+
+    stage('Plan') {
+      steps {
+        script {
+          if (params.ACTION == 'destroy') {
+            sh '''
+set -euo pipefail
+TFVARS="terraform/env/${ENV}.tfvars"
+if [ ! -f "$TFVARS" ]; then echo "Missing $TFVARS" && exit 1; fi
+terraform -chdir=terraform/env plan -destroy -var-file="$TFVARS" -out=terraform.plan
+'''
+          } else {
+            sh 'make plan ENV=${ENV} AWS_REGION=${AWS_REGION}'
+          }
+        }
+      }
+    }
+
+    stage('Confirm Apply/Destroy') {
+      when { anyOf { expression { params.ACTION == 'apply' }; expression { params.ACTION == 'destroy' } } }
+      steps {
+        input message: "Proceed with ${params.ACTION}?", ok: 'Proceed'
+      }
+    }
+
+    stage('Apply/Destroy') {
+      when { anyOf { expression { params.ACTION == 'apply' }; expression { params.ACTION == 'destroy' } } }
+      steps {
+        script {
+          String auto = params.AUTO_APPROVE ? "-auto-approve" : ""
+          if (params.ACTION == 'destroy') {
+            sh "terraform -chdir=terraform/env apply ${auto} terraform.plan"
+          } else if (params.ACTION == 'apply') {
+            sh "terraform -chdir=terraform/env apply ${auto} terraform.plan"
+          }
+        }
+      }
+    }
+
+    stage('Add-ons') {
+      when { allOf { expression { params.ACTION == 'apply' }; expression { params.INSTALL_ADDONS } } }
+      steps {
+        sh 'chmod +x scripts/manage_addons.sh scripts/update_kubeconfig.sh && ./scripts/update_kubeconfig.sh && ./scripts/manage_addons.sh upgrade'
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'terraform.plan', allowEmptyArchive: true
+    }
+  }
+}

@@ -1,0 +1,72 @@
+pipeline {
+  agent any
+  options { timestamps() }
+
+  parameters {
+    choice(name: 'ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Add-on action: plan=dry-run, apply=install/upgrade, destroy=uninstall')
+    string(name: 'ENV', defaultValue: 'dev', description: 'Environment name')
+    booleanParam(name: 'AUTO_APPROVE', defaultValue: false, description: 'Auto-approve apply/destroy (still gated by manual input)')
+    booleanParam(name: 'INSTALL_ADDONS', defaultValue: true, description: 'If false, skip add-on work')
+  }
+
+  environment {
+    AWS_REGION = "${env.AWS_REGION ?: 'ap-south-1'}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Tooling') {
+      steps {
+        sh 'chmod +x scripts/require_tools.sh && ./scripts/require_tools.sh'
+      }
+    }
+
+    stage('Backend Config') {
+      when { expression { params.INSTALL_ADDONS } }
+      steps {
+        sh '''
+set -euo pipefail
+: "${TF_STATE_BUCKET:?Set TF_STATE_BUCKET in Jenkins credentials/env}"
+: "${TF_LOCK_TABLE:?Set TF_LOCK_TABLE in Jenkins credentials/env}"
+cat > terraform/env/backend.hcl <<'EOT_BACKEND'
+bucket         = "${TF_STATE_BUCKET}"
+dynamodb_table = "${TF_LOCK_TABLE}"
+key            = "env/${ENV}/terraform.tfstate"
+region         = "${AWS_REGION}"
+encrypt        = true
+EOT_BACKEND
+'''
+      }
+    }
+
+    stage('Init (read-only)') {
+      when { expression { params.INSTALL_ADDONS } }
+      steps {
+        sh 'make tf-init ENV=${ENV} AWS_REGION=${AWS_REGION}'
+      }
+    }
+
+    stage('Confirm Apply/Destroy') {
+      when { allOf { expression { params.INSTALL_ADDONS }; anyOf { expression { params.ACTION == 'apply' }; expression { params.ACTION == 'destroy' } } } }
+      steps {
+        input message: "Proceed with ${params.ACTION} add-ons?", ok: 'Proceed'
+      }
+    }
+
+    stage('Run Add-ons Action') {
+      when { expression { params.INSTALL_ADDONS } }
+      steps {
+        script {
+          String addonAction = 'plan'
+          if (params.ACTION == 'apply') { addonAction = 'upgrade' }
+          if (params.ACTION == 'destroy') { addonAction = 'uninstall' }
+          if (params.ACTION == 'plan') { addonAction = 'plan' }
+          sh "chmod +x scripts/update_kubeconfig.sh scripts/manage_addons.sh && ./scripts/update_kubeconfig.sh && ./scripts/manage_addons.sh ${addonAction}"
+        }
+      }
+    }
+  }
+}
